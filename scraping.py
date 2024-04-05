@@ -17,27 +17,27 @@ file_path = "espn_mens_college_basketball_teams.html"
 #     file.write(get("https://www.espn.com/mens-college-basketball/teams").text)
 
 
-def scrape_ids(file_path="ids.json"):
+def scrape_ids(gender="mens"):
 
-    id_str = get("https://www.espn.com/mens-college-basketball/teams").text
+    id_str = get(f"https://www.espn.com/{gender}-college-basketball/teams").text
     matches = re.findall(r'\{"n":(.*?)\}\]\}', id_str, re.DOTALL) 
     ids = {}
     for match in matches:
         json_obj = json.loads('{"n":' + match + '}]}')
         ids[json_obj["n"]] = json_obj["id"]
-    with open(file_path, "w") as file:
+    with open(f"{gender}_ids.json", "w") as file:
         json.dump(ids, file)
 
 
-def get_ids(file_path="ids.json"):
+def get_ids(gender="mens"):
 
-    with open(file_path, "r") as file:
+    with open(f"{gender}_ids.json", "r") as file:
         return json.load(file)
 
 
-def get_player_stats(id):
+def get_player_stats(id, gender="mens"):
 
-    input_str = get(f"https://www.espn.com/mens-college-basketball/team/stats/_/id/{id}").text
+    input_str = get(f"https://www.espn.com/{gender}-college-basketball/team/stats/_/id/{id}").text
     match = re.search(r'"playerStats":\[\[(.*?)\]\]', input_str, re.DOTALL)
     if match:
         stats = {}
@@ -68,14 +68,14 @@ def player_stats_parse_individual(data):
     return concise_stats
 
 
-def daily_update():
+def daily_update(time_delta=0, gender="mens"):
 
     current_date = datetime.now()
-    day_before = current_date - timedelta(days=1)
+    day_before = current_date - timedelta(days=time_delta)
     formatted_date = day_before.strftime('%Y%m%d')
     print(formatted_date)
 
-    html_content = get(f"https://www.espn.com/mens-college-basketball/scoreboard/_/date/{formatted_date}").text
+    html_content = get(f"https://www.espn.com/{gender}-college-basketball/scoreboard/_/date/{formatted_date}").text
 
     evts_index = html_content.find("evts")
     start_index = html_content.find("[", evts_index)
@@ -98,7 +98,7 @@ def daily_update():
     else:
         return None
     
-    dataset_dir = 'dataset'
+    dataset_dir = f'dataset_{gender}'
     if not os.path.exists(dataset_dir):
         os.makedirs(dataset_dir)
     
@@ -117,12 +117,12 @@ def daily_update():
                     "team":winning_team, 
                     "score":winning_score, 
                     "home":winner_home_status, 
-                    "stats":get_player_stats(get_ids()[winning_team])
+                    "stats":get_player_stats(get_ids(gender)[winning_team], gender)
                 }, {
                     "team":losing_team, 
                     "score":losing_score, 
                     "home":loser_home_status, 
-                    "stats":get_player_stats(get_ids()[losing_team])
+                    "stats":get_player_stats(get_ids(gender)[losing_team], gender)
                 }]
     
         fname = os.path.join(dataset_dir, f"{winning_team}-{losing_team}-{formatted_date}.json")
@@ -136,7 +136,8 @@ def run_threaded(job_func):
     job_thread.start()
 
 def schedule_daily_update():
-    schedule.every().day.at("17:13").do(run_threaded, daily_update)
+    schedule.every().day.at("23:59").do(run_threaded, lambda: daily_update(time_delta=0, gender="mens"))
+    schedule.every().day.at("23:59").do(run_threaded, lambda: daily_update(time_delta=0, gender="womens"))
 
     while True:
         schedule.run_pending()
