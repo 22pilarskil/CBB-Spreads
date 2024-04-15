@@ -67,6 +67,47 @@ def player_stats_parse_individual(data):
     
     return concise_stats
 
+def get_record(id, gender="mens"):
+    start_substring='"groups":[{'
+    input_str = get(f"https://www.espn.com/{gender}-college-basketball/standings").text
+    start_index = input_str.find(start_substring)
+    if start_index == -1:
+        return "Substring not found."
+
+    start_index += len(start_substring) - 2
+
+    braces_count = 0
+    brackets_count = 0
+
+    braces_count += 1
+
+    i = start_index
+    conferences = None
+    while i < len(input_str):
+        if input_str[i] == '{':
+            braces_count += 1
+        elif input_str[i] == '}':
+            braces_count -= 1
+        elif input_str[i] == '[':
+            brackets_count += 1
+        elif input_str[i] == ']':
+            brackets_count -= 1
+        
+        if braces_count == 0 and brackets_count == 0:
+            conferences = json.loads(input_str[start_index:i])
+            break
+
+        i += 1
+    if conferences is None:
+        return None
+    
+    else:
+        for conference in conferences:
+            for team in conference["standings"]:
+                if team["team"]["id"] == id:
+                    return team["stats"][3]
+        return None
+
 
 def daily_update(time_delta=0, gender="mens"):
 
@@ -117,12 +158,14 @@ def daily_update(time_delta=0, gender="mens"):
                     "team":winning_team, 
                     "score":winning_score, 
                     "home":winner_home_status, 
-                    "stats":get_player_stats(get_ids(gender)[winning_team], gender)
+                    "stats":get_player_stats(get_ids(gender)[winning_team], gender),
+                    "record":get_record(get_ids(gender)[winning_team], gender)
                 }, {
                     "team":losing_team, 
                     "score":losing_score, 
                     "home":loser_home_status, 
-                    "stats":get_player_stats(get_ids(gender)[losing_team], gender)
+                    "stats":get_player_stats(get_ids(gender)[losing_team], gender),
+                    "record":get_record(get_ids(gender)[losing_team], gender)
                 }]
     
         fname = os.path.join(dataset_dir, f"{winning_team}-{losing_team}-{formatted_date}.json")
@@ -146,4 +189,6 @@ def schedule_daily_update():
 
 
 if __name__ == '__main__':
-    schedule_daily_update()
+    # schedule_daily_update()
+    # x = get_record(59, "mens")
+    daily_update(time_delta=30, gender="mens")
